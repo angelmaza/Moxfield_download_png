@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Magic Ang</title>
+    <style>
+        /* Estilos Generales */
+        body {
+            background-color: #2c2c2c;
+            font-family: Arial, sans-serif;
+            color: white;
+            margin: 0;
+            padding: 0;
+        }
+        #error {
+            text-align: center;
+            color: rgb(255, 65, 65);
+        }
+        #num_cartas {
+            text-align: center;
+            color: rgb(226, 222, 222);
+        }
+        /* Encabezado */
+        header {
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            background-color: #1f1f1f;
+            border-bottom: 4px solid orange;
+            padding: 15px;
+            flex-wrap: wrap;
+        }
+
+        header div {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 45%;
+            min-width: 300px;
+        }
+
+        header div p {
+            font-size: 1.1em;
+            font-weight: bold;
+            color: orange;
+            text-align: center;
+            margin-bottom: 10px;
+        }
+
+        header div input,
+        header div textarea {
+            width: 100%;
+            padding: 8px;
+            border: 2px solid orange;
+            border-radius: 5px;
+            background-color: #333;
+            color: white;
+            font-size: 1em;
+        }
+
+        header div textarea {
+            height: 80px;
+        }
+
+        header div button {
+            width: 60%;
+            padding: 8px;
+            margin-top: 10px;
+            border-radius: 5px;
+            border: none;
+            background-color: orange;
+            color: black;
+            font-weight: bold;
+            cursor: pointer;
+            transition: 0.3s ease;
+        }
+
+        header div button:hover {
+            background-color: #ff9800;
+        }
+
+        /* Zona de Botones */
+        #zonaboton {
+            text-align: center;
+            margin: 20px 0;
+        }
+
+        .boton-descarga {
+            padding: 10px 15px;
+            background-color: #ff5722;
+            color: white;
+            font-weight: bold;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: 0.3s ease;
+        }
+
+        .boton-descarga:hover {
+            background-color: #e64a19;
+        }
+
+        /* Resultado - Cartas */
+        #resultado {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 15px;
+            padding: 20px;
+        }
+
+        /* Tarjetas */
+        .card {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #1f1f1f;
+            padding: 15px;
+            border-radius: 10px;
+            box-shadow: 2px 2px 10px rgba(255, 165, 0, 0.4);
+            transition: 0.3s ease;
+            width: 200px;
+            max-width: 200px;
+            text-align: center;
+        }
+
+        .card:hover {
+            transform: scale(1.05);
+            box-shadow: 4px 4px 15px rgba(255, 165, 0, 0.6);
+        }
+
+        /* Texto dentro de las tarjetas */
+        .card-nombre {
+            font-size: 1em;
+            font-weight: bold;
+            margin: 10px 0;
+            color: white;
+        }
+
+        /* Imágenes de las cartas */
+        .card-imagen {
+            max-width: 100%;
+            height: auto;
+            border-radius: 5px;
+            padding: 10px;
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+
+        <!-- <div>
+            <p>Busqueda normal de cartas</p>
+            <input type="text" id="carta" placeholder="Nombre de la carta">
+            <button onclick="buscar()">Buscar</button>
+        </div> -->
+        <div>
+            <p>Pegar lista de moxfield, quitando sideboard, para descargar</p>
+            <!-- <input type="text" id="cartas" placeholder="texto cartas"> -->
+            <textarea id="cartas" placeholder="exportar de moxfield"></textarea>
+            <button onclick="buscarimg()">Busqueda descargar</button>
+        </div>
+    </header>
+    <div id="zonaboton"></div>
+    <div id="error"></div>
+    <div id="num_cartas"></div>
+
+    <div id="resultado"></div>
+</body>
+
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+<script>
+    const api = "https://api.scryfall.com";
+
+
+    async function buscarimg() {
+        let cartas = procesarCartas();
+        let cartas_final = [];
+        let cajaerror = document.getElementById('error');
+        cajaerror.innerHTML = "";
+        caja_contador = document.getElementById('num_cartas');
+        caja_contador.innerHTML = "";
+        let contador_pngs = 0;
+
+
+        // Use Promise.all to wait for all fetch operations to complete
+        await Promise.all(cartas.map(async (carta) => {
+            let codigo_set = carta['codigo'];
+            let numero_carta = carta['numero'];
+
+            let params = `/cards/${encodeURIComponent(codigo_set)}/${encodeURIComponent(numero_carta)}`;
+            let endpoint = api + params;
+
+            try {
+                await new Promise(resolve => setTimeout(resolve, 100)); // Delay de 50ms por buenas prácticas
+                let response = await fetch(endpoint, {
+                    headers: {
+                        "User-Agent": "MTGSearchApp/1.0",
+                        "Accept": "application/json"
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error("Error en la búsqueda: " + response.statusText);
+                }
+
+                let data = await response.json();
+
+                if (data.card_faces && ((data.layout == 'transform') || data.layout == 'modal_dfc')) {
+                    // Si la carta tiene varias caras, recorrer ambas
+                    data.card_faces.forEach(face => {
+                        cartas_final.push([
+                            face.name,                 // Nombre de la cara
+                            face.image_uris?.normal,   // Imagen en tamaño normal
+                            face.image_uris?.png       // Imagen en PNG
+                        ]);
+                        contador_pngs++;
+                    });
+                } else {
+                    cartas_final.push([data.name, data.image_uris?.normal, data.image_uris?.png]);
+                    contador_pngs++;
+                }
+
+
+            } catch (error) {
+                console.error(`❌Fallo con ${carta.nombre} Error al cargar ${endpoint}: ${error.message}`); // Muestra error detallado en consola
+                cajaerror.innerHTML += `<h4>Te aviso, no se ha encontrado ${carta.nombre}, descargate el png a mano</h4>`;
+                // document.getElementById("resultado").innerHTML = `<p>Error: ${error.message}</p>`;
+            }
+        }));
+        caja_contador.innerHTML = `Total de <strong>${contador_pngs}</strong> cartas (las dobles cuentan como 2)`;
+        // Now that all fetch operations are complete, call mostrarlistacartas
+        mostrarlistacartas(cartas_final);
+    }
+
+    function mostrarlistacartas(cartas_final) {
+        // console.log(cartas_final);
+
+        let contenedor = document.getElementById('resultado');
+        contenedor.innerHTML = ""; // Limpiar el contenedor antes de agregar nuevas cartas
+
+        cartas_final.forEach(carta => {
+            let card = document.createElement('div');
+            card.classList.add('card'); // Asigna la clase "card" para los estilos
+
+            let nombre = document.createElement('p');
+            nombre.textContent = carta[0]; // Nombre de la carta
+            nombre.classList.add('card-nombre'); // Clase para el nombre
+
+            let imagen = document.createElement('img');
+            imagen.src = carta[1]; // URL de la imagen
+            imagen.classList.add('card-imagen'); // Clase para la imagen
+
+            // Agregar elementos a la tarjeta
+            card.appendChild(nombre);
+            card.appendChild(imagen);
+            contenedor.appendChild(card);
+        });
+
+        // Add a button to download all images
+        let downloadButton = document.createElement('button');
+        downloadButton.classList = "boton-descarga";
+        downloadButton.textContent = "Download All Cards";
+
+
+        downloadButton.addEventListener('click', () => {
+            descargarTodasLasCartas(cartas_final);
+        });
+        let cajaboton = document.getElementById('zonaboton');
+        cajaboton.innerHTML = "";
+        cajaboton.prepend(downloadButton);
+    }
+
+
+    function procesarCartas() {
+        // Obtener el texto del textarea
+        let texto = document.getElementById('cartas').value.trim();
+
+        // Dividir el texto en líneas
+        let lineas = texto.split('\n');
+        // Procesar cada línea
+        let cartas = lineas.map(linea => {
+            // Expresión regular para extraer el nombre, código y número
+            let linea_bien = linea.replace(/\*\S+\*/g, "").trim(); // Elimina cualquier texto entre dos asteriscos
+
+            let match = linea_bien.match(/^\d+\s+(.+?)\s+\(([^)]+)\)\s+(\S+)$/);
+
+            if (match) {
+                return {
+                    nombre: match[1].trim(), // Nombre de la carta
+                    codigo: match[2],        // Código entre paréntesis
+                    numero: match[3].trim()  // Número al final
+                };
+            }
+            return null; // Si no coincide, devolver null
+        }).filter(carta => carta !== null); // Filtrar líneas no válidas
+
+        return cartas; // Devolver el array de cartas procesadas
+    }
+
+    async function descargarTodasLasCartas(cartas_final) {
+        const zip = new JSZip(); // Create a new ZIP file
+        const folder = zip.folder("cards"); // Create a folder inside the ZIP file
+
+        // Function to introduce a delay
+        const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+        // Fetch each image and add it to the ZIP file with a delay
+        for (let i = 0; i < cartas_final.length; i++) {
+            const carta = cartas_final[i];
+            try {
+                const response = await fetch(carta[2]); // carta[2] is the PNG URL
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch image: ${carta[0]}`);
+                }
+                const blob = await response.blob(); // Get the image as a Blob
+                folder.file(`${carta[0]}.png`, blob); // Add the image to the ZIP folder
+            } catch (error) {
+                console.error(`Error downloading image for ${carta[0]}:`, error);
+            }
+
+            // Add a delay of 100ms between requests
+            if (i < cartas_final.length - 1) {
+                await delay(100);
+            }
+        }
+
+        // Generate the ZIP file and trigger the download
+        zip.generateAsync({ type: "blob" }).then((content) => {
+            saveAs(content, "cards.zip"); // Use FileSaver.js to save the ZIP file
+        });
+    }
+
+</script>
+
+
+</html>
